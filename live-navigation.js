@@ -1,0 +1,134 @@
+// Embedded walking guidance; geolocation begins only after an explicit click.
+let followNext=true,buildingMatch=null,buildingRequest=null,routeRequest=null,routeLine=null,accuracyRing=null;
+let routeResult=null,lastRouteStart=null,lastRouteTime=0,locationTime=0,locationState='尚未开启定位',routeState='开启定位后，显示步行路线和预计时间',activeCourseKey='',buildingState='',fitOnRoute=true;
+let activeDestinationCoordinate='';
+const buildingCache=new Map();
+const externalNavigation=$('#navigate').onclick;
+const guidance=document.createElement('section');guidance.id='live-guidance';guidance.innerHTML=`<div class="guidance-title"><b>本页步行导航</b><button id="follow-next">跟随下节课</button></div><div class="guidance-stats"><span><small>我的位置</small><b id="live-location">尚未开启定位</b></span><span><small>步行距离</small><b id="walk-distance">—</b></span><span><small>预计用时</small><b id="walk-duration">—</b></span></div><p id="walking-status" role="status"></p><div class="guidance-actions"><button class="primary" id="start-live-location">开启定位并规划</button><button id="retry-walking">重新规划</button><button id="fit-walking">查看全程</button><button id="correct-building">校正教学楼</button><button id="external-navigation">其他地图</button></div><p class="guidance-note">定位点与教学楼坐标会发送至 FOSSGIS / OpenStreetMap 步行服务，用于生成路线。预计时间不含上楼与等候时间。</p>`;
+$('.map-panel').after(guidance);
+function currentCoordinate(c=visible[selected]) {
+  if(!c||!school)return null;
+  const stored=bindings[bindingKey(c)];if(validCoordinate(stored))return stored;
+  // Reuse an already confirmed location for another room in the same building.
+  const sameBuilding=Object.entries(bindings).find(([key,coord])=>{try{const p=JSON.parse(key);return p[0]===school.name&&p[1]===school.campus&&p[2]===c.building&&validCoordinate(coord)}catch{return false}});
+  return sameBuilding?.[1]||buildingMatch;
+}
+function clearWalkingRoute(){routeRequest?.abort();routeRequest=null;if(routeLine){routeLine.remove();routeLine=null}routeResult=null;lastRouteStart=null;$('#walk-distance').textContent='—';$('#walk-duration').textContent='—'}
+function clearDevicePosition(){position=null;locationTime=0;if(userPin){userPin.remove();userPin=null}if(accuracyRing){accuracyRing.remove();accuracyRing=null}}
+function updateGuidance() {
+  guidance.hidden=!school;
+  $('#live-location').textContent=locationState;
+  $('#walking-status').textContent=buildingState||routeState;
+  $('#follow-next').classList.toggle('active',followNext);
+  $('#start-live-location').textContent=watch!==null?'停止实时定位':'开启定位并规划';
+  $('#locate').title=watch!==null?'停止实时定位':'开启实时定位并规划';
+  if(school){$('.destination p').textContent=routeResult?`${Math.round(routeResult.distance)} 米 · 步行约 ${Math.max(1,Math.ceil(routeResult.duration/60))} 分钟`:buildingState||routeState}
+}
+function revealGeographicMap(){geoMap?.invalidateSize()}
+function markDestination(c,coord) {
+  if(roomPin){roomPin.remove();roomPin=null}
+  if(!geoMap||!coord)return;
+  roomPin=L.marker(coord,{icon:L.divIcon({className:'classroom-location',html:'<span>▥</span>',iconSize:[36,36],iconAnchor:[18,36]})}).addTo(geoMap);
+  const label=document.createElement('span');label.textContent=c.building+' · '+(c.room||'教学楼');roomPin.bindTooltip(label,{permanent:true,direction:'top',offset:[0,-33],className:'classroom-label'});
+}
+function drawLivePosition(){
+  if(!geoMap||!position)return;const point=[position.latitude,position.longitude];
+  if(!userPin)userPin=L.circleMarker(point,{radius:8,color:'#fff',weight:3,fillColor:'#357fca',fillOpacity:1}).addTo(geoMap).bindTooltip('我的实时位置');else userPin.setLatLng(point);
+  if(accuracyRing)accuracyRing.remove();accuracyRing=L.circle(point,{radius:Math.min(position.accuracy,1000),weight:1,color:'#357fca',fillOpacity:.07}).addTo(geoMap);
+}
+async function findCourseBuilding(c) {
+  if(!school||!c||currentCoordinate(c))return;
+  const key=activeCourseKey,cacheKey=JSON.stringify([school.name,school.campus,c.building]);
+  if(buildingRequest?.key===key)return;
+  if(buildingCache.has(cacheKey)){buildingMatch=buildingCache.get(cacheKey);buildingState=buildingMatch?'':'地图中未找到教学楼，请点击「校正教学楼」在地图上确认位置';markDestination(c,buildingMatch);updateGuidance();if(buildingMatch)planWalking();return}
+  buildingState='正在自动查找 '+c.building+'…';updateGuidance();
+  const request={key};buildingRequest=request;
+  try {
+    const data=await searchSchoolLocations(school.name+' '+school.campus,c.building);
+    if(buildingRequest!==request||key!==activeCourseKey)return;
+    const norm=s=>String(s||'').replace(/[\s·｜（）()]/g,'').toLowerCase();
+    const matches=data.results.filter(p=>norm(p.display_name).includes(norm(c.building))&&validCoordinate([+p.lat,+p.lon])&&distanceMeters([school.lat,school.lng],[+p.lat,+p.lon])<4000);
+    if(matches.length===1){buildingMatch=[+matches[0].lat,+matches[0].lon];buildingCache.set(cacheKey,buildingMatch);buildingState='';markDestination(c,buildingMatch);routeState='已匹配教学楼 · 开启定位后规划步行路线';if(!position)geoMap?.panTo(buildingMatch);planWalking()}
+    else {buildingState=matches.length?'检索到多个教学楼位置，请在地图上确认目的地':'暂未匹配到教学楼，请点击「校正教学楼」在地图上确认位置';}
+  }catch{if(key===activeCourseKey)buildingState='教学楼检索未连接，请重试或在地图上确认位置'}
+  if(buildingRequest===request)buildingRequest=null;
+  if(key===activeCourseKey)updateGuidance();
+}
+async function planWalking(force=false) {
+  const c=visible[selected],destination=currentCoordinate(c);
+  if(!school||!destination||!geoMap){updateGuidance();return}
+  const coordinateKey=JSON.stringify(destination);
+  if(coordinateKey!==activeDestinationCoordinate){activeDestinationCoordinate=coordinateKey;clearWalkingRoute();lastRouteTime=0;fitOnRoute=true}
+  if(!position||watch===null){routeState='教学楼已标记 · 点击「开启定位并规划」显示我的位置和路线';updateGuidance();return}
+  if(Date.now()-locationTime>60000){clearWalkingRoute();routeState='定位已过期，等待新的设备位置';updateGuidance();return}
+  if(position.accuracy>200){clearWalkingRoute();routeState='定位精度超过 200 米，等待更准确的位置后再规划';updateGuidance();return}
+  const start=[position.latitude,position.longitude];
+  if(!force&&lastRouteStart&&distanceMeters(start,lastRouteStart)<25&&Date.now()-lastRouteTime<45000)return;
+  if(!force&&Date.now()-lastRouteTime<12000)return;
+  routeRequest?.abort();const request=new AbortController();routeRequest=request;const key=activeCourseKey;
+  if(routeLine){routeLine.remove();routeLine=null}routeResult=null;$('#walk-distance').textContent='—';$('#walk-duration').textContent='—';
+  lastRouteStart=start;lastRouteTime=Date.now();routeState='正在按校园步道规划路线…';updateGuidance();
+  try {
+    const result=await fetchWalkingRoute(start,destination,{signal:request.signal});
+    if(routeRequest!==request||key!==activeCourseKey||watch===null)return;
+    routeResult=result;routeLine=L.polyline(result.points,{color:'#36876d',weight:6,opacity:.9}).addTo(geoMap);
+    $('#walk-distance').textContent=result.distance>=1000?(result.distance/1000).toFixed(1)+' 公里':Math.round(result.distance)+' 米';
+    const duration=Math.max(1,Math.ceil(result.duration/60));$('#walk-duration').textContent=duration+' 分钟';
+    const arrival=new Date(Date.now()+result.duration*1000);routeState=`预计 ${arrival.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false})} 到达教学楼 · 路线来源：${result.source}。校门开放情况请现场确认。`;
+    if(fitOnRoute){fitWalking();fitOnRoute=false}
+  }catch(error){if(routeRequest===request&&key===activeCourseKey&&!request.signal.aborted)routeState=error.name==='AbortError'?'路线连接超时，请点击重新规划':error.message+'，可点击重新规划';}
+  if(routeRequest===request){routeRequest=null;updateGuidance()}
+}
+function fitWalking(){revealGeographicMap();if(!geoMap)return;if(routeLine)geoMap.fitBounds(routeLine.getBounds(),{padding:[65,100],maxZoom:18});else{const points=[currentCoordinate(),position&&[position.latitude,position.longitude]].filter(Boolean);if(points.length)geoMap.fitBounds(L.latLngBounds(points),{padding:[70,100],maxZoom:17})}}
+const previousMapUpdate=updateMap;
+updateMap=function(){
+  if(!school){clearWalkingRoute();guidance.hidden=true;previousMapUpdate();return}
+  const c=visible[selected],key=c?bindingKey(c):'';
+  if(key!==activeCourseKey){activeCourseKey=key;buildingMatch=null;buildingState='';buildingRequest=null;clearWalkingRoute();lastRouteTime=0;fitOnRoute=true;routeState='开启定位后，显示步行路线和预计时间'}
+  $('#building-marker').hidden=true;$('#route').style.display='none';
+  $('#destination-name').textContent=c?c.building+' · '+c.room:'没有待上课程';
+  const coord=currentCoordinate(c);markDestination(c,coord);drawLivePosition();updateGuidance();
+  if(c&&!coord)findCourseBuilding(c);else if(coord){buildingState='';if(!position)geoMap?.panTo(coord);planWalking();updateGuidance()}
+};
+async function toggleLiveLocation(){
+  if(watch!==null){navigator.geolocation.clearWatch(watch);watch=null;clearWalkingRoute();clearDevicePosition();locationState='实时定位已停止';routeState='定位已停止，路线已清除';$('#location-status').textContent=locationState;updateGuidance();return}
+  if(!school){schoolSettings();return}
+  if(!navigator.geolocation){toast('当前浏览器不支持设备定位');return}
+  revealGeographicMap();locationState='正在等待定位授权…';updateGuidance();
+  watch=navigator.geolocation.watchPosition(p=>{
+    position={latitude:p.coords.latitude,longitude:p.coords.longitude,accuracy:p.coords.accuracy};locationTime=p.timestamp||Date.now();
+    locationState='定位精度约 '+Math.round(position.accuracy)+' 米';$('#location-status').textContent='我的实时位置 · '+locationState;
+    drawLivePosition();updateGuidance();planWalking();
+  },error=>{if(watch!==null)navigator.geolocation.clearWatch(watch);watch=null;clearWalkingRoute();clearDevicePosition();locationState=error.code===1?'定位权限未开启':error.code===3?'定位超时，请重试':'暂时无法获取位置';routeState='需要设备位置才能绘制步行路线';$('#location-status').textContent=locationState;updateGuidance()},{enableHighAccuracy:true,maximumAge:5000,timeout:20000});
+  updateGuidance();
+}
+$('#start-live-location').onclick=toggleLiveLocation;$('#locate').onclick=toggleLiveLocation;
+$('#retry-walking').onclick=()=>{const c=visible[selected];if(!currentCoordinate(c)&&c){buildingCache.delete(JSON.stringify([school.name,school.campus,c.building]));findCourseBuilding(c)}else planWalking(true)};
+$('#fit-walking').onclick=fitWalking;
+$('#correct-building').onclick=()=>{if(!visible[selected])return toast('请先选择一节课程');revealGeographicMap();toast('点击地图上实际教学楼的位置，核对后确认绑定');$('#map').scrollIntoView({behavior:'smooth',block:'center'})};
+$('#external-navigation').onclick=externalNavigation;
+$('#navigate').textContent='本页规划路线';$('#navigate').onclick=()=>{if(!school)return schoolSettings();revealGeographicMap();if(watch===null)toggleLiveLocation();else planWalking(true);guidance.scrollIntoView({behavior:'smooth',block:'center'})};
+function followUpcoming(){const next=nextWeeklyCourse(courses);if(!next)return;day=next.course.day;const list=courses.filter(c=>c.day===day).sort((a,b)=>minutes(a.start)-minutes(b.start));selected=list.indexOf(next.course);render();updateMap();$('#follow-next').textContent=next.ongoing?'正在上课':next.offset===0?'下节课 · 今天':`下节课 · ${next.offset}天后`}
+$('#follow-next').onclick=()=>{followNext=true;followUpcoming()};
+document.addEventListener('click',e=>{if(e.target.closest('[data-course],[data-day]')){followNext=false;$('#follow-next').textContent='跟随下节课';render();updateMap()}});
+const basicCourseRender=render;
+render=function(){
+  basicCourseRender();
+  $('.schedule-title h2').firstChild.textContent='课程表 ';
+  if(!followNext)return;
+  const upcoming=nextWeeklyCourse(courses);if(!upcoming||upcoming.course.day!==day)return;
+  if(upcoming.offset>0){
+    const date=new Date();date.setDate(date.getDate()+upcoming.offset);
+    $('#date-label').textContent=`${date.getMonth()+1}月${date.getDate()}日 · 星期${'一二三四五六日'[day-1]}`;
+    $('#countdown').textContent=`${upcoming.offset}天后 ${upcoming.course.start} 开始`;
+    const displayedMonday=new Date(date);displayedMonday.setDate(date.getDate()-(date.getDay()||7)+1);
+    document.querySelectorAll('[data-day] b').forEach((e,i)=>{const d=new Date(displayedMonday);d.setDate(d.getDate()+i);e.textContent=d.getDate()});
+    document.querySelectorAll('[data-course] em').forEach(e=>e.textContent='待上课');
+  }
+};
+$('#privacy').onclick=()=>modal('隐私说明','<p>课程、学校和教室坐标保存在当前浏览器。点击「开启定位并规划」后，浏览器请求位置授权；停止定位会清除位置标记和路线。</p><p>本页使用在线底图与设备定位，不读取手机地图 App 的内部数据。规划路线时，起点位置和教学楼坐标会发送至 FOSSGIS 的 OpenStreetMap 步行服务（OSRM / Valhalla）。位置未授权时不请求路线。</p><p>地图、教学楼检索与 OCR 模型需要网络。选择「其他地图」后才会打开外部地图服务。</p>');
+$('#help').onclick=()=>modal('本页步行导航使用方法','<p>① 设置你的学校并导入课表。页面自动跟随当前或下一节课，也可以手动选择课程。<br>② 自动检索教学楼并显示标记；匹配不到或有歧义时，点击「校正教学楼」，在地图上确认实际位置。<br>③ 点击「开启定位并规划」并允许浏览器定位。蓝点是实时位置，浅蓝圈表示定位精度，绿色线是步行路线。<br>④ 地图下方显示距离、预计时间和到达时间。移动后自动更新，点击「查看全程」可查看起终点。</p><p>路线需要联网；时间不含上楼、等候或临时封路。定位过期或精度不足时会暂停路线。无需跳转外部地图。</p>');
+// Location, destination and walking geometry share the geographic main map.
+showRealMap=async function(){await geographicShowRealMap();revealGeographicMap();drawLivePosition();updateMap()};
+revealGeographicMap();followUpcoming();updateGuidance();
+setInterval(()=>{if(followNext)followUpcoming();if(position&&watch!==null&&Date.now()-locationTime>60000){clearWalkingRoute();locationState='位置已过期，等待更新';routeState='定位过期期间不显示路线和预计时间';updateGuidance()}},30000);
