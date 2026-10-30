@@ -49,16 +49,18 @@ async function findCourseBuilding(c) {
     const data=await searchSchoolLocations(school.name+' '+school.campus,c.building);
     if(buildingRequest!==request||key!==activeCourseKey)return;
     const norm=s=>String(s||'').replace(/[\s·｜（）()]/g,'').toLowerCase();
-    const matches=data.results.filter(p=>norm(p.display_name).includes(norm(c.building))&&validCoordinate([+p.lat,+p.lon])&&distanceMeters([school.lat,school.lng],[+p.lat,+p.lon])<4000);
+    if(data.error)throw Error(data.error);
+    const matches=(data.results||[]).filter(p=>norm(p.display_name).includes(norm(c.building))&&validCoordinate([+p.lat,+p.lon])&&distanceMeters([school.lat,school.lng],[+p.lat,+p.lon])<4000);
     if(matches.length===1){buildingMatch=[+matches[0].lat,+matches[0].lon];buildingCache.set(cacheKey,buildingMatch);buildingState='';markDestination(c,buildingMatch);routeState='已匹配教学楼 · 开启定位后规划步行路线';if(!position)geoMap?.panTo(buildingMatch);planWalking()}
     else {buildingState=matches.length?'检索到多个教学楼位置，请在地图上确认目的地':'暂未匹配到教学楼，请点击「校正教学楼」在地图上确认位置';}
-  }catch{if(key===activeCourseKey)buildingState='教学楼检索未连接，请重试或在地图上确认位置'}
+  }catch(error){if(key===activeCourseKey)buildingState='教学楼检索失败：'+(error.message||'网络未连接')+'；可点击「校正教学楼」确认位置'}
   if(buildingRequest===request)buildingRequest=null;
   if(key===activeCourseKey)updateGuidance();
 }
 async function planWalking(force=false) {
   const c=visible[selected],destination=currentCoordinate(c);
-  if(!school||!destination||!geoMap){updateGuidance();return}
+  if(!school||!geoMap){updateGuidance();return}
+  if(!destination){routeState='尚未确定教学楼位置，请点击「校正教学楼」在高德地图上确认目的地';updateGuidance();return}
   const coordinateKey=JSON.stringify(destination);
   if(coordinateKey!==activeDestinationCoordinate){activeDestinationCoordinate=coordinateKey;clearWalkingRoute();lastRouteTime=0;fitOnRoute=true}
   if(!position||watch===null){routeState='教学楼已标记 · 点击「开启定位并规划」显示我的位置和路线';updateGuidance();return}
@@ -67,9 +69,10 @@ async function planWalking(force=false) {
   const start=[position.latitude,position.longitude];
   if(!force&&lastRouteStart&&distanceMeters(start,lastRouteStart)<25&&Date.now()-lastRouteTime<45000)return;
   if(!force&&Date.now()-lastRouteTime<12000)return;
+  buildingState='';
   routeRequest?.abort();const request=new AbortController();routeRequest=request;const key=activeCourseKey;
   if(routeLine){routeLine.remove();routeLine=null}routeResult=null;$('#walk-distance').textContent='—';$('#walk-duration').textContent='—';
-  lastRouteStart=start;lastRouteTime=Date.now();routeState='正在规划并检查校园通行范围…';updateGuidance();
+  lastRouteStart=start;lastRouteTime=Date.now();routeState='正在请求高德步行路线…';updateGuidance();
   try {
     const result=await fetchWalkingRoute(start,destination,{signal:request.signal});
     if(routeRequest!==request||key!==activeCourseKey||watch===null)return;

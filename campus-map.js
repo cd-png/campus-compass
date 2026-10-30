@@ -14,6 +14,13 @@ async function loadCampusMap(){
  window._AMapSecurityConfig=amapSession.serviceHost?{serviceHost:amapSession.serviceHost}:{securityJsCode:amapSession.securityJsCode};
  amapLoading=new Promise((resolve,reject)=>{const script=document.createElement('script');let done=false;const finish=error=>{if(done)return;done=true;clearTimeout(timer);if(error){amapLoading=null;script.remove();reject(error)}else resolve()};const timer=setTimeout(()=>finish(Error('高德地图加载超时，请检查网络、Key和域名白名单')),20000);script.src='https://webapi.amap.com/maps?v=2.0&key='+encodeURIComponent(amapSession.key)+'&plugin=AMap.Walking,AMap.PlaceSearch';script.onload=()=>finish(window.AMap?.Map?null:Error('高德地图未初始化，请核对 Key'));script.onerror=()=>finish(Error('无法连接高德地图，请检查网络'));document.head.appendChild(script)});return amapLoading;
 }
+let amapProxyHealthyAt=0,amapProxyCheck;
+async function checkAMapProxy(){
+ if(!amapSession.serviceHost)return;
+ if(Date.now()-amapProxyHealthyAt<30000)return;
+ if(amapProxyCheck)return amapProxyCheck;
+ amapProxyCheck=(async()=>{try{const base=amapSession.serviceHost.replace(/\/_AMapService\/?$/,'');const response=await fetch(base+'/health',{signal:AbortSignal.timeout(6000),cache:'no-store'});if(!response.ok)throw Error();amapProxyHealthyAt=Date.now()}catch{throw Error('高德路线与检索服务暂时无法连接，底图仍可浏览；请稍后重试，或在地图上校正教学楼位置')}finally{amapProxyCheck=null}})();return amapProxyCheck;
+}
 const CampusMapAPI={
  map(container){const raw=new AMap.Map(container,{viewMode:'2D',resizeEnable:true,zoom:16,mapStyle:'amap://styles/normal',features:['bg','road','building','point'],showIndoorMap:false});const map={raw,setView(p,z){raw.setZoomAndCenter(z,amapPoint(p));return map},panTo(p){raw.setCenter(amapPoint(p));return map},zoomIn(){raw.zoomIn()},zoomOut(){raw.zoomOut()},invalidateSize(){raw.resize?.()},on(event,fn){raw.on(event,e=>{if(e.lnglat){const p=fromAMap(e.lnglat);fn({latlng:{lat:p[0],lng:p[1]}})}});return map},fitBounds(points,opts={}){if(!points?.length)return;const markers=points.map(p=>new AMap.Marker({position:amapPoint(p)}));raw.setFitView(markers,false,opts.padding?[opts.padding[1],opts.padding[0],opts.padding[1],opts.padding[0]]:[80,60,80,60],opts.maxZoom||18)},remove(){raw.destroy();amapMaps.delete(map)}};amapMaps.add(map);return map},
  divIcon(options){return options},latLngBounds(points){return points},
@@ -32,5 +39,5 @@ function amapSettings(){
 }
 let campusEditState=null,campusPolicyOverlay=null;
 searchSchoolLocations=async function(name,campus){
- try{await loadCampusMap();return await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('高德地点检索超时')),15000);new AMap.PlaceSearch({pageSize:10,extensions:'all'}).search([name,campus].filter(Boolean).join(' '),(status,result)=>{clearTimeout(timer);if(status!=='complete'){resolve({results:[],error:'高德未返回匹配地点，请补充学校和校区名称'});return}resolve({results:(result.poiList?.pois||[]).filter(p=>p.location).map(p=>{const coord=fromAMap(p.location);return{lat:coord[0],lon:coord[1],display_name:[p.name,p.address].filter(Boolean).join(' · '),name:p.name,source:'高德地图地点检索'}})})})})}catch(e){return{results:[],error:e.message}}
+ try{await loadCampusMap();await checkAMapProxy();return await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('高德地点检索超时')),15000);new AMap.PlaceSearch({pageSize:10,extensions:'all'}).search([name,campus].filter(Boolean).join(' '),(status,result)=>{clearTimeout(timer);if(status!=='complete'){resolve({results:[],error:'高德未返回匹配地点，请补充学校和校区名称'});return}resolve({results:(result.poiList?.pois||[]).filter(p=>p.location).map(p=>{const coord=fromAMap(p.location);return{lat:coord[0],lon:coord[1],display_name:[p.name,p.address].filter(Boolean).join(' · '),name:p.name,source:'高德地图地点检索'}})})})})}catch(e){return{results:[],error:e.message}}
 };
