@@ -1,0 +1,4 @@
+// Approximate WGS84 campus centers; these are not classroom coordinates.
+const CAMPUS_CATALOG=[{name:'上海师范大学',campus:'徐汇校区',aliases:['上海师大','上师大','shnu','shanghai normal university'],address:'上海市徐汇区桂林路100号',lat:31.163,lng:121.413},{name:'上海师范大学',campus:'奉贤校区',aliases:['上海师大','上师大','shnu','shanghai normal university'],address:'上海市奉贤区海思路100号',lat:30.833,lng:121.514}];
+function findLocalSchools(name,campus=''){const norm=s=>String(s).toLowerCase().replace(/\s+/g,'');const q=norm(name),area=norm(campus).replace(/校区$/,'');if(!q)return[];return CAMPUS_CATALOG.filter(s=>[s.name,...s.aliases].some(a=>norm(a).includes(q)||q.includes(norm(a)))&&(!area||norm(s.campus).includes(area))).map(s=>({...s,lon:s.lng,display_name:`${s.name} · ${s.campus}｜${s.address}`,source:'本地校区目录 · 校园概略位置'}))}
+if(typeof module!=='undefined')module.exports={findLocalSchools};

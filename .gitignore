@@ -1,0 +1,6 @@
+node_modules/
+cloudflared.exe
+.env
+.env.*
+!.env.example
+*.log
