@@ -28,7 +28,11 @@ GitHub Pages采用浏览器直连，Key仅当前标签页内存，服务需允�
 
 所有活动地图、学校预览、地点搜索与步行服务统一接入高德JS API 2.0；不再启用OSM、卫星图或其他地图提供商作回退。没有Key时显示明确配置入口，青禾大学示意图仍仅作演示。
 
-「高德地图设置」填Web端（JS API）Key及securityJsCode，或配置安全代理serviceHost。配置仅当前标签页内存，刷新丢失。生产部署应使用安全代理保护安全密钥并配置网站域名白名单；GitHub Pages无法承担该代理。当前没有高德凭据，因此尚未进行真实高德地图/路线联调。官方配置文档：https://lbs.amap.com/api/javascript-api-v2/guide/abc/prepare
+「高德地图设置」支持Web端（JS API）Key及securityJsCode，或安全代理serviceHost。已创建域名限制为cd-png.github.io的网页Key，并在公网标签页验证道路地图加载。尚未完成真实步行路线联调。
+
+Cloudflare安全代理源码：amap-proxy-worker.mjs，部署配置：wrangler.jsonc。AMAP_KEY和AMAP_SECURITY_CODE已写入Cloudflare加密Secret；安全密钥未写入源码或GitHub。代理仅转发限定的地点检索、步行和样式接口，验证网站来源与Key，不记录请求或密钥。测试：`node amap-proxy-worker.test.mjs`。Worker已部署至https://campus-amap-proxy.3815790653.workers.dev；当前网络访问该地址连接超时，尚未通过真实代理检索验证。前端已准备公开Key和代理地址的默认配置，待网络连通验证成功后再同步公网，不能将部署成功等同于访客可用。Workers免费额度和网络可达性以实际账号及部署验证为准。
+
+官方配置文档：https://lbs.amap.com/api/javascript-api-v2/guide/abc/jscode
 
 设备与历史教学楼坐标保持WGS84；显示、地点检索与高德步行路线做GCJ-02转换。定位仍需浏览器/系统授权；不读取地图App内部数据。起终点仅在用户开启定位后发送给高德服务。
 

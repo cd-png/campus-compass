@@ -1,0 +1,8 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "campus-amap-proxy",
+  "main": "amap-proxy-worker.mjs",
+  "compatibility_date": "2026-10-01",
+  "account_id": "8199c59d34e274745219939260a2a521",
+  "workers_dev": true
+}
