@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict'),E=require('./timetable-import');
+const c=E.text('星期一\n课程：高等数学\n时间：08:00-09:35\n地点：第一教学楼 A201\n教师：张老师').courses[0];
+assert.equal(c.name,'高等数学');assert.equal(c.start,'08:00');assert.equal(c.room,'A201');assert.equal(c.day,1);assert.equal(E.validate([c]).length,0);
+const csv=E.text('课程名称,星期,开始时间,结束时间,教学楼,教室号\n"数学,实验",周二,10:00,11:35,第二教学楼,302').courses[0];assert.equal(csv.name,'数学,实验');assert.equal(csv.day,2);
+const missing=E.text('课程：英语\n地点：第三教学楼 201').courses[0];assert.equal(missing.day,'');assert.equal(missing.start,'');assert.equal(E.validate([missing]).length,1);
+assert.equal(E.extract('课程：数学\n第1-2节').start,'');const p=E.parsePeriods('1 08:00-08:45\n2 08:55-09:40');assert.equal(E.extract('课程：数学\n第1-2节',{},p.map).end,'09:40');
+assert.equal(E.move(c,3,'14:00').end,'15:35');assert.throws(()=>E.move(c,3,'23:30'));
+const grid=E.matrix([['时间','星期一','星期二'],['08:00-09:35','数学\n第一教学楼 201','英语\n第二教学楼 302']]);assert.equal(grid.length,2);assert.equal(grid[1].day,2);
+assert.equal(E.calendar('BEGIN:VCALENDAR\nBEGIN:VEVENT\nDTSTART:20261026T000000Z\nDTEND:20261026T013500Z\nSUMMARY:数学\nLOCATION:第一教学楼 201\nRRULE:FREQ=WEEKLY;BYDAY=MO,WE\nEND:VEVENT\nEND:VCALENDAR').courses.length,2);
+console.log('Timetable extraction, preview validation, periods, grid, calendar and move checks passed');

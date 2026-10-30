@@ -73,18 +73,18 @@ schoolSettings=function() {
   }
   async function preview(p,name,campus) {
     if(previewTiles){previewTiles.destroy();previewTiles=null}if(previewMap){previewMap.remove();previewMap=null}
-    area.innerHTML=`<div class="preview-heading"><b>${esc(name)} ${esc(campus)}</b><small>${esc(p.source || p.display_name || 'WGS84 地图位置')}</small></div><div id="school-map-preview" aria-label="学校地图预览"></div><p id="preview-map-status" role="status">正在加载地图组件…</p><div class="modal-actions"><button id="preview-retry">重试底图</button><button id="preview-switch">切换底图</button><button class="primary" id="apply-school">设为我的学校</button></div><p class="muted">校区位置不等于教室位置。设置学校后，可在主地图绑定课程教室。</p>`;
+    area.innerHTML=`<div class="preview-heading"><b>${esc(name)} ${esc(campus)}</b><small>${esc(p.source || p.display_name || 'WGS84 地图位置')}</small></div><div id="school-map-preview" aria-label="学校地图预览"></div><p id="preview-map-status" role="status">正在加载地图组件…</p><div class="modal-actions"><button id="preview-retry">重试底图</button><button id="preview-switch">高德地图设置</button><button class="primary" id="apply-school">设为我的学校</button></div><p class="muted">校区位置不等于教室位置。设置学校后，可在主地图绑定课程教室。</p>`;
     const container=$('#school-map-preview'),status=$('#preview-map-status');
     $('#apply-school').onclick=()=>{$('#setting-school').value=name;$('#setting-campus').value=campus;saveSchool(p.lat,p.lon ?? p.lng)};
     $('#preview-retry').onclick=()=>previewTiles?previewTiles.retry():preview(p,name,campus);
-    $('#preview-switch').onclick=()=>previewTiles?.switch();
+    $('#preview-switch').onclick=amapSettings;
     try {
-      await loadLeaflet();if(!container.isConnected)return;
-      previewMap=L.map(container).setView([+p.lat,+(p.lon ?? p.lng)],16);
-      L.marker([+p.lat,+(p.lon ?? p.lng)]).addTo(previewMap).bindPopup(document.createTextNode(name+' '+campus));
+      await loadCampusMap();if(!container.isConnected)return;
+      previewMap=CampusMapAPI.map(container).setView([+p.lat,+(p.lon ?? p.lng)],16);
+      CampusMapAPI.marker([+p.lat,+(p.lon ?? p.lng)]).addTo(previewMap).bindPopup(document.createTextNode(name+' '+campus));
       previewTiles=attachCampusTiles(previewMap,(state,message)=>{status.textContent=message;status.className=state==='error'?'validation-error':''});
       previewMap.invalidateSize();
-    }catch{if(status.isConnected)status.textContent='地图组件未加载成功，请检查网络后点击重试底图。'}
+    }catch(error){if(status.isConnected)status.textContent=error.message}
   }
   displayResults(findLocalSchools('上海师范大学'));
   $('#school-search-form').onsubmit=async e=>{

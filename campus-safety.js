@@ -1,0 +1,13 @@
+/* Campus constraints are conservative: unverified data never becomes a valid route. */
+const CampusSafety=(()=>{
+ const eps=1e-10;
+ function cross(a,b,c){return(b[1]-a[1])*(c[0]-a[0])-(b[0]-a[0])*(c[1]-a[1])}
+ function on(p,a,b){return Math.abs(cross(a,b,p))<eps&&p[0]>=Math.min(a[0],b[0])-eps&&p[0]<=Math.max(a[0],b[0])+eps&&p[1]>=Math.min(a[1],b[1])-eps&&p[1]<=Math.max(a[1],b[1])+eps}
+ function contains(p,poly){let inside=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const a=poly[i],b=poly[j];if(on(p,a,b))return true;if((a[0]>p[0])!==(b[0]>p[0])&&p[1]<(b[1]-a[1])*(p[0]-a[0])/(b[0]-a[0])+a[1])inside=!inside}return inside}
+ function intersects(a,b,c,d){const x=cross(a,b,c),y=cross(a,b,d),z=cross(c,d,a),w=cross(c,d,b);return x*y<-eps*eps&&z*w<-eps*eps||on(c,a,b)||on(d,a,b)||on(a,c,d)||on(b,c,d)}
+ function validPolygon(poly){if(!Array.isArray(poly)||poly.length<3||poly.some(p=>!Array.isArray(p)||p.length!==2||!p.every(Number.isFinite)||Math.abs(p[0])>90||Math.abs(p[1])>180))return false;let area=0;for(let i=0;i<poly.length;i++){const a=poly[i],b=poly[(i+1)%poly.length];area+=a[1]*b[0]-b[1]*a[0];for(let j=i+2;j<poly.length;j++){if(i===0&&j===poly.length-1)continue;if(intersects(a,b,poly[j],poly[(j+1)%poly.length]))return false}}return Math.abs(area)>1e-10}
+ function segmentInside(a,b,poly){if(!contains(a,poly)||!contains(b,poly))return false;const ts=[0,1],dx=b[1]-a[1],dy=b[0]-a[0];for(let i=0;i<poly.length;i++){const c=poly[i],d=poly[(i+1)%poly.length],ex=d[1]-c[1],ey=d[0]-c[0],den=dx*ey-dy*ex;if(Math.abs(den)<eps)continue;const t=((c[1]-a[1])*ey-(c[0]-a[0])*ex)/den,u=((c[1]-a[1])*dy-(c[0]-a[0])*dx)/den;if(t>0&&t<1&&u>=0&&u<=1)ts.push(t)}ts.sort((x,y)=>x-y);return ts.slice(1).every((t,i)=>{const m=(t+ts[i])/2;return contains([a[0]+dy*m,a[1]+dx*m],poly)})}
+ function check(points,policy){if(!policy?.confirmed||!validPolygon(policy.boundary))return{status:'unknown',message:'待核实：尚未核对校园边界，不显示路线和预计时间'};if(!Array.isArray(points)||points.length<2)return{status:'blocked',message:'不可行：路线数据不完整'};if(!points.slice(1).every((p,i)=>segmentInside(points[i],p,policy.boundary)))return{status:'blocked',message:'不可行：路线越出校园边界，已拦截校外绕行'};for(const zone of policy.blocked||[]){if(!validPolygon(zone))return{status:'unknown',message:'待核实：禁行区域数据无效'};if(points.some(p=>contains(p,zone))||points.slice(1).some((p,i)=>zone.some((q,j)=>intersects(points[i],p,q,zone[(j+1)%zone.length]))))return{status:'blocked',message:'不可行：路线经过已标记的禁行区域'}}return{status:'candidate',message:'校内候选路线：边界与已标记禁行区域校验通过；现场通行仍需确认'}}
+ return{contains,validPolygon,segmentInside,check};
+})();
+if(typeof module!=='undefined')module.exports=CampusSafety;
