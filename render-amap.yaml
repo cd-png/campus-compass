@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: campus-amap-proxy
+    runtime: node
+    plan: free
+    buildCommand: node --check amap-proxy-node.mjs
+    startCommand: node amap-proxy-node.mjs
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: AMAP_KEY
+        sync: false
+      - key: AMAP_SECURITY_CODE
+        sync: false
