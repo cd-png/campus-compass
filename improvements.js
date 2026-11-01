@@ -65,7 +65,13 @@ schoolSettings=function() {
   modal('搜索与预览学校地图',`<p>输入学校名称和校区，先查看地图，再决定是否设为我的学校。</p><form id="school-search-form"><label>学校名称<input id="setting-school" required maxlength="120" placeholder="例如：上海师范大学" value="${esc(school?.name || '')}"></label><label>校区或城市<input id="setting-campus" maxlength="80" placeholder="例如：徐汇校区 / 上海" value="${esc(school?.campus || '')}"></label><button class="primary" id="find-school">搜索并预览地图</button></form><div id="school-results" aria-live="polite"></div><div id="campus-preview-area"></div><p class="muted">上海师范大学可直接选择校区；其他学校需要在线检索。预览为校园周边地图，建筑细节以底图数据为准。</p><details><summary>通过已知坐标预览</summary><label>纬度（WGS84）<input id="school-lat" type="number" min="-90" max="90" step="any"></label><label>经度（WGS84）<input id="school-lng" type="number" min="-180" max="180" step="any"></label><button id="preview-coordinate">预览此位置</button></details><button id="use-demo">返回青禾大学演示校园</button>`);
   const results=$('#school-results'),area=$('#campus-preview-area');
   function displayResults(list) {
-    results.innerHTML=list.map((p,i)=>`<button class="school-result" data-preview-school="${i}"><b>${esc(p.display_name)}</b><br><small>${esc(p.source || '在线地图检索')} · 点击预览</small></button>`).join('');
+    results.innerHTML=list.map((p,i)=>`<div class="school-choice"><button type="button" class="school-result" data-preview-school="${i}"><b>${esc(p.display_name)}</b><br><small>${esc(p.source || '在线地图检索')} · 预览地图</small></button><button type="button" class="primary" data-apply-school="${i}">选择此校区</button></div>`).join('');
+    results.querySelectorAll('[data-apply-school]').forEach(b=>b.onclick=()=>{
+      const p=list[+b.dataset.applySchool];
+      $('#setting-school').value=p.name || $('#setting-school').value.trim();
+      $('#setting-campus').value=p.campus || $('#setting-campus').value.trim();
+      saveSchool(p.lat,p.lon ?? p.lng);
+    });
     results.querySelectorAll('[data-preview-school]').forEach(b=>b.onclick=()=>{
       const p=list[+b.dataset.previewSchool];
       preview(p,p.name || $('#setting-school').value.trim(),p.campus || $('#setting-campus').value.trim());
@@ -73,7 +79,8 @@ schoolSettings=function() {
   }
   async function preview(p,name,campus) {
     if(previewTiles){previewTiles.destroy();previewTiles=null}if(previewMap){previewMap.remove();previewMap=null}
-    area.innerHTML=`<div class="preview-heading"><b>${esc(name)} ${esc(campus)}</b><small>${esc(p.source || p.display_name || 'WGS84 地图位置')}</small></div><div id="school-map-preview" aria-label="学校地图预览"></div><p id="preview-map-status" role="status">正在加载地图组件…</p><div class="modal-actions"><button id="preview-retry">重试底图</button><button id="preview-switch">腾讯地图设置</button><button class="primary" id="apply-school">设为我的学校</button></div><p class="muted">校区位置不等于教室位置。设置学校后，可在主地图绑定课程教室。</p>`;
+    area.innerHTML=`<div class="preview-heading"><b>${esc(name)} ${esc(campus)}</b><small>${esc(p.source || p.display_name || 'WGS84 地图位置')}</small></div><div class="modal-actions"><button id="preview-retry">重试底图</button><button id="preview-switch">腾讯地图设置</button><button class="primary" id="apply-school">设为我的学校</button></div><div id="school-map-preview" aria-label="学校地图预览"></div><p id="preview-map-status" role="status">正在加载地图组件…</p><p class="muted">校区位置不等于教室位置。设置学校后，可在主地图绑定课程教室。</p>`;
+    area.scrollIntoView({block:'start',behavior:'smooth'});
     const container=$('#school-map-preview'),status=$('#preview-map-status');
     $('#apply-school').onclick=()=>{$('#setting-school').value=name;$('#setting-campus').value=campus;saveSchool(p.lat,p.lon ?? p.lng)};
     $('#preview-retry').onclick=()=>previewTiles?previewTiles.retry():preview(p,name,campus);
