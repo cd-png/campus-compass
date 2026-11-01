@@ -6,7 +6,7 @@ let locationTracker=null;
 let locationFailure='';
 const buildingCache=new Map();
 const externalNavigation=$('#navigate').onclick;
-const guidance=document.createElement('section');guidance.id='live-guidance';guidance.innerHTML=`<div class="guidance-title"><b>本页步行导航</b><button id="follow-next">跟随下节课</button></div><div class="guidance-stats"><span><small>我的位置</small><b id="live-location">尚未开启定位</b></span><span><small>步行距离</small><b id="walk-distance">—</b></span><span><small>预计用时</small><b id="walk-duration">—</b></span></div><p id="walking-status" role="status"></p><div class="guidance-actions"><button class="primary" id="start-live-location">开启定位并规划</button><button id="retry-walking">重新规划</button><button id="fit-walking">查看全程</button><button id="correct-building">校正教学楼</button><button id="external-navigation">其他地图</button></div><p class="guidance-note">定位点与教学楼坐标会发送至高德步行服务。未设置校园范围时直接使用高德步行路线，可能经过校外道路；设置范围后检查边界与禁行区。实际通行情况请现场确认。</p>`;
+const guidance=document.createElement('section');guidance.id='live-guidance';guidance.innerHTML=`<div class="guidance-title"><b>本页步行导航</b><button id="follow-next">跟随下节课</button></div><div class="guidance-stats"><span><small>我的位置</small><b id="live-location">尚未开启定位</b></span><span><small>步行距离</small><b id="walk-distance">—</b></span><span><small>预计用时</small><b id="walk-duration">—</b></span></div><p id="walking-status" role="status"></p><div class="guidance-actions"><button class="primary" id="start-live-location">开启定位并规划</button><button id="retry-walking">重新规划</button><button id="fit-walking">查看全程</button><button id="correct-building">校正教学楼</button><button id="external-navigation">其他地图</button></div><p class="guidance-note">定位点与教学楼坐标会发送至腾讯步行服务。未设置校园范围时直接使用腾讯步行路线，可能经过校外道路；设置范围后检查边界与禁行区。实际通行情况请现场确认。</p>`;
 $('.map-panel').after(guidance);
 function currentCoordinate(c=visible[selected]) {
   if(!c||!school)return null;
@@ -60,7 +60,7 @@ async function findCourseBuilding(c) {
 async function planWalking(force=false) {
   const c=visible[selected],destination=currentCoordinate(c);
   if(!school||!geoMap){updateGuidance();return}
-  if(!destination){routeState='尚未确定教学楼位置，请点击「校正教学楼」在高德地图上确认目的地';updateGuidance();return}
+  if(!destination){routeState='尚未确定教学楼位置，请点击「校正教学楼」在腾讯地图上确认目的地';updateGuidance();return}
   const coordinateKey=JSON.stringify(destination);
   if(coordinateKey!==activeDestinationCoordinate){activeDestinationCoordinate=coordinateKey;clearWalkingRoute();lastRouteTime=0;fitOnRoute=true}
   if(!position||watch===null){routeState='教学楼已标记 · 点击「开启定位并规划」显示我的位置和路线';updateGuidance();return}
@@ -72,7 +72,7 @@ async function planWalking(force=false) {
   buildingState='';
   routeRequest?.abort();const request=new AbortController();routeRequest=request;const key=activeCourseKey;
   if(routeLine){routeLine.remove();routeLine=null}routeResult=null;$('#walk-distance').textContent='—';$('#walk-duration').textContent='—';
-  lastRouteStart=start;lastRouteTime=Date.now();routeState='正在请求高德步行路线…';updateGuidance();
+  lastRouteStart=start;lastRouteTime=Date.now();routeState='正在请求腾讯步行路线…';updateGuidance();
   try {
     const result=await fetchWalkingRoute(start,destination,{signal:request.signal});
     if(routeRequest!==request||key!==activeCourseKey||watch===null)return;
@@ -98,11 +98,12 @@ updateMap=function(){
 async function toggleLiveLocation(){
   if(watch!==null){locationTracker?.stop();watch=null;locationFailure='';clearWalkingRoute();clearDevicePosition();locationState='实时定位已停止';routeState='定位已停止，路线已清除';$('#location-status').textContent=locationState;updateGuidance();return}
   if(!school){schoolSettings();return}
-  if(!navigator.geolocation){toast('当前浏览器不支持设备定位');return}
+  const deviceGeo=(typeof window!=='undefined'&&window.nativeCampusGeolocation)||navigator.geolocation;
+  if(!deviceGeo){toast('当前浏览器不支持设备定位');return}
   if(typeof isSecureContext!=='undefined'&&!isSecureContext){showLocationHelp('当前网页不是安全环境，请使用 HTTPS 正式网址或 localhost');return}
   revealGeographicMap();locationFailure='';locationState='正在等待定位授权…';updateGuidance();
   watch=-1;
-  locationTracker=startDeviceLocation(navigator.geolocation,{onPosition:p=>{
+  locationTracker=startDeviceLocation(deviceGeo,{onPosition:p=>{
     locationFailure='';
     position={latitude:p.coords.latitude,longitude:p.coords.longitude,accuracy:p.coords.accuracy};locationTime=p.timestamp||Date.now();
     locationState='定位精度约 '+Math.round(position.accuracy)+' 米'+(Date.now()-locationTime>10000?'（最近位置）':'');$('#location-status').textContent='我的位置 · '+locationState;
@@ -148,7 +149,7 @@ render=function(){
     document.querySelectorAll('[data-course] em').forEach(e=>e.textContent='待上课');
   }
 };
-$('#privacy').onclick=()=>modal('隐私说明','<p>课程、学校和教室坐标保存在当前浏览器。点击「开启定位并规划」后，浏览器请求位置授权；停止定位会清除位置标记和路线。</p><p>本页使用在线底图与设备定位，不读取手机地图 App 的内部数据。规划路线时，起点位置和教学楼坐标会发送至高德步行服务。位置未授权时不请求路线。</p><p>地图、教学楼检索与 OCR 模型需要网络。选择「其他地图」后才会打开外部地图服务。</p>');
+$('#privacy').onclick=()=>modal('隐私说明','<p>课程、学校和教室坐标保存在当前浏览器。点击「开启定位并规划」后，浏览器请求位置授权；停止定位会清除位置标记和路线。</p><p>本页使用在线底图与设备定位，不读取手机地图 App 的内部数据。规划路线时，起点位置和教学楼坐标会发送至腾讯步行服务。位置未授权时不请求路线。</p><p>地图、教学楼检索与 OCR 模型需要网络。选择「其他地图」后才会打开外部地图服务。</p>');
 $('#help').onclick=()=>modal('本页步行导航使用方法','<p>① 设置你的学校并导入课表。页面自动跟随当前或下一节课，也可以手动选择课程。<br>② 自动检索教学楼并显示标记；匹配不到或有歧义时，点击「校正教学楼」，在地图上确认实际位置。<br>③ 点击「开启定位并规划」并允许浏览器定位。蓝点是实时位置，浅蓝圈表示定位精度，绿色线是步行路线。<br>④ 地图下方显示距离、预计时间和到达时间。移动后自动更新，点击「查看全程」可查看起终点。</p><p>路线需要联网；时间不含上楼、等候或临时封路。定位过期或精度不足时会暂停路线。无需跳转外部地图。</p>');
 // Location, destination and walking geometry share the geographic main map.
 showRealMap=async function(){await geographicShowRealMap();revealGeographicMap();drawLivePosition();updateMap()};

@@ -50,7 +50,7 @@ function selectUpcomingCourse() {
   selected=next<0?Math.max(0,list.length-1):next; render(); updateMap();
 }
 selectUpcomingCourse();
-$('#help').onclick=()=>modal('如何使用课间','<p>① 点击地图顶部校名，选择学校和校区。<br>② 导入课表后点击预览，检查错误及时间冲突，再确认保存。也可在「我的课表」中手动添加、编辑或删除课程。<br>③ 在真实地图点击教学楼，为所选课程绑定教室位置。<br>④ 点击 ⌖ 获取实时位置，再点击开始导航，选择高德、百度或腾讯地图。</p><p>「我的课表 → 导出备份」可下载 JSON 文件，在其他设备导入。图片识别仅提取文字，需核对整理；页面关闭后不发送课程提醒。</p>');
+$('#help').onclick=()=>modal('如何使用课间','<p>① 点击地图顶部校名，选择学校和校区。<br>② 导入课表后点击预览，检查错误及时间冲突，再确认保存。也可在「我的课表」中手动添加、编辑或删除课程。<br>③ 在真实地图点击教学楼，为所选课程绑定教室位置。<br>④ 点击 ⌖ 获取实时位置，再点击开始导航，选择腾讯、百度或腾讯地图。</p><p>「我的课表 → 导出备份」可下载 JSON 文件，在其他设备导入。图片识别仅提取文字，需核对整理；页面关闭后不发送课程提醒。</p>');
 
 // A preview never changes the saved school until the user chooses to apply it.
 let previewMap=null,previewTiles=null;
@@ -73,7 +73,7 @@ schoolSettings=function() {
   }
   async function preview(p,name,campus) {
     if(previewTiles){previewTiles.destroy();previewTiles=null}if(previewMap){previewMap.remove();previewMap=null}
-    area.innerHTML=`<div class="preview-heading"><b>${esc(name)} ${esc(campus)}</b><small>${esc(p.source || p.display_name || 'WGS84 地图位置')}</small></div><div id="school-map-preview" aria-label="学校地图预览"></div><p id="preview-map-status" role="status">正在加载地图组件…</p><div class="modal-actions"><button id="preview-retry">重试底图</button><button id="preview-switch">高德地图设置</button><button class="primary" id="apply-school">设为我的学校</button></div><p class="muted">校区位置不等于教室位置。设置学校后，可在主地图绑定课程教室。</p>`;
+    area.innerHTML=`<div class="preview-heading"><b>${esc(name)} ${esc(campus)}</b><small>${esc(p.source || p.display_name || 'WGS84 地图位置')}</small></div><div id="school-map-preview" aria-label="学校地图预览"></div><p id="preview-map-status" role="status">正在加载地图组件…</p><div class="modal-actions"><button id="preview-retry">重试底图</button><button id="preview-switch">腾讯地图设置</button><button class="primary" id="apply-school">设为我的学校</button></div><p class="muted">校区位置不等于教室位置。设置学校后，可在主地图绑定课程教室。</p>`;
     const container=$('#school-map-preview'),status=$('#preview-map-status');
     $('#apply-school').onclick=()=>{$('#setting-school').value=name;$('#setting-campus').value=campus;saveSchool(p.lat,p.lon ?? p.lng)};
     $('#preview-retry').onclick=()=>previewTiles?previewTiles.retry():preview(p,name,campus);
