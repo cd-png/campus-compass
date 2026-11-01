@@ -16,3 +16,4 @@
 .school-choice{border:2px solid #dce8d8;background:#f8fbf5;padding:12px}
 .school-choice>.primary{font-size:15px;font-weight:700;min-height:48px;padding:13px 20px;background:#2e6349;box-shadow:0 2px 5px #28563f18}
 @media(max-width:550px){.map-top>button#campus-info{width:100%;font-size:16px;min-height:48px}.school-choice>.primary{font-size:16px;min-height:50px}}
+@media(max-width:550px){.map-top>button.school-picker{display:flex;width:100%}.map-top>button#campus-info{display:block}}
