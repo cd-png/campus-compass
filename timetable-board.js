@@ -16,13 +16,17 @@ fullSchedule=function(){
   $('#calendar-pick').onclick=()=>{calendarPickMode=!calendarPickMode;pickedCourse=null;fullSchedule()};
   $('#calendar-undo').onclick=()=>{if(!timetableUndo)return;try{const snapshot=timetableUndo;persistCourses(snapshot);timetableUndo=null;fullSchedule();toast('已撤销上次移动')}catch{toast('撤销未能保存，请检查浏览器存储')}};
   $('#board-export').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(courses,null,2)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download='课间课表备份.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+  const editor=document.createElement('div');editor.className='course-time-list';
+  editor.innerHTML='<h3>直接修改课程时间</h3>'+courses.map((c,i)=>`<button type="button" class="school-result" data-time-edit="${i}"><b>${esc(c.name)}</b> · 周${'一二三四五六日'[c.day-1]} ${esc(c.start)}–${esc(c.end)} <strong>修改时间 ›</strong></button>`).join('');
+  $('.calendar-scroll').before(editor);
+  editor.querySelectorAll('[data-time-edit]').forEach(b=>b.onclick=()=>editCourse(+b.dataset.timeEdit));
   let dragged=null,didDrag=false,touchStart=null,dragOffset=0;
   function targetAt(column,y){const offset=y-column.getBoundingClientRect().top-dragOffset,index=Math.max(0,Math.min(slots-1,Math.floor(offset/40)));return{day:+column.dataset.calendarDay,start:timeLabel(startMinute+index*30)}}
   document.querySelectorAll('[data-calendar-course]').forEach(chip=>{
     const index=+chip.dataset.calendarCourse;
     chip.ondragstart=e=>{dragged=index;dragOffset=e.clientY-chip.getBoundingClientRect().top;didDrag=true;e.dataTransfer.setData('text/plain',String(index));e.dataTransfer.effectAllowed='move';chip.classList.add('moving')};chip.ondragend=()=>{dragged=null;chip.classList.remove('moving');setTimeout(()=>didDrag=false,0)};
     chip.onclick=()=>{if(didDrag)return;if(calendarPickMode){pickedCourse=index;document.querySelectorAll('.calendar-course').forEach(c=>c.classList.toggle('picked',c===chip));$('#calendar-instructions').textContent='已选 '+courses[index].name+'，请点击目标星期的空白时段。'}else editCourse(index)};
-    chip.onpointerdown=e=>{if(e.pointerType==='mouse'||calendarPickMode)return;dragOffset=e.clientY-chip.getBoundingClientRect().top;touchStart={x:e.clientX,y:e.clientY,index};chip.setPointerCapture(e.pointerId)};
+    chip.onpointerdown=e=>{if(e.pointerType==='mouse'||calendarPickMode)return;dragOffset=e.clientY-chip.getBoundingClientRect().top;touchStart={x:e.clientX,y:e.clientY,index}};
     chip.onpointermove=e=>{if(!touchStart)return;if(Math.hypot(e.clientX-touchStart.x,e.clientY-touchStart.y)>8){didDrag=true;chip.classList.add('moving');const column=document.elementFromPoint(e.clientX,e.clientY)?.closest('[data-calendar-day]');if(column){const target=targetAt(column,e.clientY);$('#calendar-instructions').textContent='松开以移动到周'+ '一二三四五六日'[target.day-1]+' '+target.start}}};
     chip.onpointerup=e=>{if(!touchStart)return;const selected=touchStart.index;touchStart=null;chip.classList.remove('moving');if(didDrag){const column=document.elementFromPoint(e.clientX,e.clientY)?.closest('[data-calendar-day]');if(column){const target=targetAt(column,e.clientY);commitCalendarMove(selected,target.day,target.start)}setTimeout(()=>didDrag=false,0)}};
     chip.onpointercancel=()=>{touchStart=null;didDrag=false;chip.classList.remove('moving')};
